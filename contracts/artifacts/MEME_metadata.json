@@ -1,6 +1,6 @@
 {
 	"compiler": {
-		"version": "0.8.1+commit.df193b15"
+		"version": "0.8.3+commit.8d00100c"
 	},
 	"language": "Solidity",
 	"output": {
@@ -33,6 +33,44 @@
 					}
 				],
 				"name": "Approval",
+				"type": "event"
+			},
+			{
+				"anonymous": false,
+				"inputs": [
+					{
+						"indexed": false,
+						"internalType": "uint256",
+						"name": "tokensSwapped",
+						"type": "uint256"
+					},
+					{
+						"indexed": false,
+						"internalType": "uint256",
+						"name": "bnbReceived",
+						"type": "uint256"
+					},
+					{
+						"indexed": false,
+						"internalType": "uint256",
+						"name": "tokensIntoLiqudity",
+						"type": "uint256"
+					}
+				],
+				"name": "SwapAndLiquify",
+				"type": "event"
+			},
+			{
+				"anonymous": false,
+				"inputs": [
+					{
+						"indexed": false,
+						"internalType": "bool",
+						"name": "enabled",
+						"type": "bool"
+					}
+				],
+				"name": "SwapAndLiquifyEnabledUpdated",
 				"type": "event"
 			},
 			{
@@ -84,6 +122,45 @@
 				"name": "SetCharityWallet",
 				"outputs": [],
 				"stateMutability": "nonpayable",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "bool",
+						"name": "enabled",
+						"type": "bool"
+					}
+				],
+				"name": "SetSwapAndLiquifyEnabled",
+				"outputs": [],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			},
+			{
+				"inputs": [],
+				"name": "_pancakeV2Pair",
+				"outputs": [
+					{
+						"internalType": "address",
+						"name": "",
+						"type": "address"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [],
+				"name": "_pancakeV2Router",
+				"outputs": [
+					{
+						"internalType": "contract IPancakeRouter02",
+						"name": "",
+						"type": "address"
+					}
+				],
+				"stateMutability": "view",
 				"type": "function"
 			},
 			{
@@ -344,10 +421,14 @@
 				],
 				"stateMutability": "nonpayable",
 				"type": "function"
+			},
+			{
+				"stateMutability": "payable",
+				"type": "receive"
 			}
 		],
 		"devdoc": {
-			"details": "Implementation of the {IERC20} interface. This implementation is agnostic to the way tokens are created. This means that a supply mechanism has to be added in a derived contract using {_mint}. For a generic mechanism see {ERC20PresetMinterPauser}. TIP: For a detailed writeup see our guide https://forum.zeppelin.solutions/t/how-to-implement-erc20-supply-mechanisms/226[How to implement supply mechanisms]. We have followed general OpenZeppelin guidelines: functions revert instead of returning `false` on failure. This behavior is nonetheless conventional and does not conflict with the expectations of ERC20 applications. Additionally, an {Approval} event is emitted on calls to {transferFrom}. This allows applications to reconstruct the allowance for all accounts just by listening to said events. Other implementations of the EIP may not emit these events, as it isn't required by the specification. Finally, the non-standard {decreaseAllowance} and {increaseAllowance} functions have been added to mitigate the well-known issues around setting allowances. See {IERC20-approve}.",
+			"details": "Implementation of the {IERC20} interface. Deflationary MEME Coin. Owner receives all tokens & is responsible to add liquidity to pancake swap, distribute tokens etc. 10% of tokens are burned -> 4% of tokens will be burned by selling and adding to liquidity pool, or sent to 0 address. 4% of tokens will be redistributed to existing holders 2% of tokens will sent to charity wallet on every transaction  Owner cannot mint new tokens. This is set in the constructor. Owner can only perform the following functions: SetCharityWallet() <-- set the wallet that will receive the charity distribution SetSwapAndLiquifyEnabled() <-- turn liquification on or off. Tokens will be burned regardless - but whether burned tokens should be sold & added to liquidity, or just sent to 0 address is determined here. AddLiquidityProviderAddressToExcludeFromDistribution() <-- add Liquidity Provider addresses that should not receive token re-distributions. LP has most of the tokens but shouldn't receive distributions.  There is ",
 			"kind": "dev",
 			"methods": {
 				"allowance(address,address)": {
@@ -408,12 +489,36 @@
 		"remappings": []
 	},
 	"sources": {
-		"contracts/MEME_ERC20.sol": {
-			"keccak256": "0x71d242e069f655a52fc13795514fef484c6ac952259fa84652eccb565f9b0988",
+		"contracts/IPancakeFactory.sol": {
+			"keccak256": "0xdcba7832198b348aa01e34d8cae03956badc5bca32aa93bd48727569d1ba7de1",
 			"license": "MIT",
 			"urls": [
-				"bzz-raw://0fd3ad69e1c37bffcb3461fadf95a54ed664815c4f76c60f92b685b11f000e1f",
-				"dweb:/ipfs/QmYRUTeKPBQLHmyhrnykB7Zb8Cn7dmGWPyMVRi5odV2Ec2"
+				"bzz-raw://3c3da207581f8d61d7112bead9ece9c1bd30b19deaacd37031cdec71c607a9c0",
+				"dweb:/ipfs/QmedVW426GwTmD1JN7u5DoY3tsTPB9M13UacQYAwpu8gzG"
+			]
+		},
+		"contracts/IPancakeRouter01.sol": {
+			"keccak256": "0x35901201f5ff3cc51ab0b2b803d1d1de8f63e12b30edc75761b8322b2ea97543",
+			"license": "MIT",
+			"urls": [
+				"bzz-raw://704e8de8e8350ce467df1c620fd87581643b485992706aceda388cf1b9669805",
+				"dweb:/ipfs/QmZtF5uNZfhpnZtb41D7RerYLkwj299Pf4Q4yA77UiqzvE"
+			]
+		},
+		"contracts/IPancakeRouter02.sol": {
+			"keccak256": "0xc3d5dbd0debbf1a23169c4a7c315af430039624211e13ec72c2a70af640bfd71",
+			"license": "MIT",
+			"urls": [
+				"bzz-raw://fa2ad98e309c85a5a1e10756d5fc51977ad2667d226e90ed76786258625f4488",
+				"dweb:/ipfs/QmVMhqEruBi2bBLbzqvXVZ2JEiCppJQzaekD6tGF8ovBAX"
+			]
+		},
+		"contracts/MEME_ERC20.sol": {
+			"keccak256": "0x0fe604278dc7ed3eba6e5519b6cff1331ee0a6c58c336714c229223c2b674799",
+			"license": "MIT",
+			"urls": [
+				"bzz-raw://a754252f9ac94c3fbf3c222a16946cb6226a6222971caad1207da1d61a0aca52",
+				"dweb:/ipfs/Qmf3zDhcE5BAFwtGvduWdZoCeLr6mJ79LZGYqEhKXxSGBF"
 			]
 		},
 		"github/OpenZeppelin/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol": {

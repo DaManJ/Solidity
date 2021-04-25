@@ -20,11 +20,15 @@ import "./IPancakeRouter02.sol";
  * 
  * Owner cannot mint new tokens. This is set in the constructor.
  * Owner can only perform the following functions:
- * SetCharityWallet() <-- set the wallet that will receive the charity distribution
- * SetSwapAndLiquifyEnabled() <-- turn liquification on or off. Tokens will be burned regardless - but whether burned tokens should be sold & added to liquidity, or just sent to 0 address is determined here.
- * AddLiquidityProviderAddressToExcludeFromDistribution() <-- add Liquidity Provider addresses that should not receive token re-distributions. LP has most of the tokens but shouldn't receive distributions.
- * 
- * There is 
+ * SetCharityWallet() -->
+ *      set the wallet that will receive the charity distribution
+ * SetSwapAndLiquifyEnabled() -->
+ *      turn liquification on or off. Tokens will be burned regardless
+ *      but whether burned tokens should be sold & added to liquidity, or just sent to 0 address is determined here.
+ * AddLiquidityProviderAddressToExcludeFromDistribution() -->
+ *      add Liquidity Provider addresses that should not receive token re-distributions. 
+ *      LP has most of the tokens but shouldn't receive distributions.
+ *  
  */
 contract MEME is Context, IERC20, IERC20Metadata {
     
@@ -178,7 +182,7 @@ contract MEME is Context, IERC20, IERC20Metadata {
     //a new dividend is paid
     function _disburse(uint amount) private {
         uint256 getTotalSupplyExcludingLiquidityProvider = _getTotalSupplyExcludingLiquidityProvider();
-        //point multiplier is used to reduce division errors as noted atahttps://weka.medium.com/dividend-bearing-tokens-on-ethereum-42d01c710657
+        //point multiplier is used to reduce division errors as noted at https://weka.medium.com/dividend-bearing-tokens-on-ethereum-42d01c710657
         _totalDisbursementPercentagePoints += (amount * _pointMultiplier / getTotalSupplyExcludingLiquidityProvider);
         _unclaimedDisbursements += amount;
         _totalSupplyRedistributed += amount;

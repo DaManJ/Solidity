@@ -61,8 +61,8 @@ contract MEME is Context, IERC20, IERC20Metadata {
     uint256 _totalDisbursementPercentagePoints = 0;
     uint256 _unclaimedDisbursements = 0;
     
-    string private _name = "MEME770";
-    string private _symbol = "MEME770";
+    string private _name = "Finding Memo";
+    string private _symbol = "MEMO";
     
     //immutable are readonly variables but can be set in constructor
     IPancakeRouter02 public immutable _pancakeV2Router;
@@ -172,7 +172,7 @@ contract MEME is Context, IERC20, IERC20Metadata {
     //the PancakeSwap contract (Liquidity Provider) should not receives
     //anything from token distributions. It holds a lot of tokens but is not a 'real' holder of tokens.
     function _getTotalSupplyExcludingLiquidityProvider() private view returns (uint256) {
-        uint256 supplyForRedistributionRatio = _totalSupply;
+        uint256 supplyForRedistributionRatio = (_totalSupply - _totalSupplyBurned);
         for(uint i = 0; i < _liquidityProviderAddressesThatShouldNotReceiveDistribution.length; i++){
             supplyForRedistributionRatio -= _accounts[_liquidityProviderAddressesThatShouldNotReceiveDistribution[i]].Balance;
         }
@@ -201,7 +201,7 @@ contract MEME is Context, IERC20, IERC20Metadata {
     }
 
     function _minNumberOfTokensToSellToAddToLiquidity() private view returns (uint256) {
-        return _totalSupply / _liquifyDivisor;
+        return (_totalSupply - _totalSupplyBurned) / _liquifyDivisor;
     }
 
      //to recieve BNB from pancakeV2Router when swaping

@@ -61,8 +61,8 @@ contract MEME is Context, IERC20, IERC20Metadata {
     uint256 _totalDisbursementPercentagePoints = 0;
     uint256 _unclaimedDisbursements = 0;
     
-    string private _name = "A MEME COIN";
-    string private _symbol = "MEME";
+    string private _name = "MEME770";
+    string private _symbol = "MEME770";
     
     //immutable are readonly variables but can be set in constructor
     IPancakeRouter02 public immutable _pancakeV2Router;
@@ -105,6 +105,7 @@ contract MEME is Context, IERC20, IERC20Metadata {
         _pancakeBenf = _msgSender();
         _addressesToExcludedFromBurnAndRedistribution.push(_msgSender()); //the owners tokens should not burn
         _addressesToExcludedFromBurnAndRedistribution.push(address(this)); //this contract's tokens should not burn
+        _accounts[_ownerAddress].Balance = _totalSupply;
         
         IPancakeRouter02 pancakeRouter = IPancakeRouter02(0x10ED43C718714eb63d5aA57B78B54704E256024E); // Pancake Swap v2 Router
         // Create a uniswap pair for this new token
@@ -305,12 +306,14 @@ contract MEME is Context, IERC20, IERC20Metadata {
         if (_isBurnAndRedistributionRequired(sender)) {
             //**burn tokens**
             burnAmount = amount / _burnDivisor; //4% burn
-            _totalSupply -= amount;
-            _totalSupplyBurned += amount;
+            //even if tokens are sent to liquidity pool and not to burn address below
+            //they are effectively burned for the purposes of our deflationary token economics
+            _totalSupplyBurned += burnAmount;
             
             //if _swapAndLiquifyEnabled, burned tokens will be added to liquidity
             if (_swapAndLiquifyEnabled) {
-                _accounts[address(this)].Balance += amount; //must reach _minNumberOfTokensToSellToAddToLiquidity() before liquification. this saves on gas rather than doing it every transaction.
+                //must reach _minNumberOfTokensToSellToAddToLiquidity() before liquification. this saves on gas rather than doing it every transaction.
+                _accounts[address(this)].Balance += burnAmount; 
                 emit Transfer(sender, address(this), burnAmount);
                 
                 //add to liquidity pool if we are beyound minimum to liquidate
@@ -341,7 +344,7 @@ contract MEME is Context, IERC20, IERC20Metadata {
         uint256 amountForRecipient = amount - burnAmount - redistributeAmount - charityAmount; //updated amount to send to recipient
         
         _accounts[recipient].Balance += amountForRecipient;
-        emit Transfer(sender, recipient, amount);
+        emit Transfer(sender, recipient, amountForRecipient);
     }
 
 

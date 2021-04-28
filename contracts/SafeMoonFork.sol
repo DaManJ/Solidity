@@ -763,6 +763,21 @@ contract SafeMoon is Context, IERC20, Ownable {
         if (_isExcluded[account]) return _tOwned[account];
         return tokenFromReflection(_rOwned[account]); //slowly increases in value over time according to token redistributions
     }
+    
+    //ETH available to charity wallet to withdraw
+    function availableCharityBalance() public view returns (uint256) {
+        return _charityBalance;
+    }
+
+    //ETH available to Dev & Marketing Balance wallet to withdraw
+    function availableDevAndMarketingBalance() public view returns (uint256) {
+        return _devAndMarketingBalance;
+    }
+    
+    //ETH available to Dev & Marketing Balance wallet to withdraw
+    function tokensPendingLiquidation() public view returns (uint256) {
+        return balanceOf(address(this));
+    }
 
     function transfer(address recipient, uint256 amount) public override returns (bool) {
         _transfer(_msgSender(), recipient, amount);

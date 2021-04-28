@@ -1,18 +1,7 @@
-/**
-  
-   #BEE
-   
-   #LIQ+#RFI+#SHIB+#DOGE = #BEE
-   #SAFEMOON features:
-   3% fee auto add to the liquidity pool to locked forever when selling
-   2% fee auto distribute to all holders
-   I created a black hole so #Bee token will deflate itself in supply with every transaction
-   50% Supply is burned at start.
-   
- */
+// SPDX-License-Identifier: MIT
 
-pragma solidity ^0.6.12;
-// SPDX-License-Identifier: Unlicensed
+pragma solidity ^0.8.0;
+
 interface IERC20 {
 
     function totalSupply() external view returns (uint256);
@@ -242,11 +231,11 @@ library SafeMath {
 }
 
 abstract contract Context {
-    function _msgSender() internal view virtual returns (address payable) {
+    function _msgSender() internal view virtual returns (address) {
         return msg.sender;
     }
 
-    function _msgData() internal view virtual returns (bytes memory) {
+    function _msgData() internal view virtual returns (bytes calldata) {
         this; // silence state mutability warning without generating bytecode - see https://github.com/ethereum/solidity/issues/2691
         return msg.data;
     }
@@ -403,17 +392,15 @@ library Address {
  * `onlyOwner`, which can be applied to your functions to restrict their use to
  * the owner.
  */
-contract Ownable is Context {
+abstract contract Ownable is Context {
     address private _owner;
-    address private _previousOwner;
-    uint256 private _lockTime;
 
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     /**
      * @dev Initializes the contract setting the deployer as the initial owner.
      */
-    constructor () internal {
+    constructor () {
         address msgSender = _msgSender();
         _owner = msgSender;
         emit OwnershipTransferred(address(0), msgSender);
@@ -422,7 +409,7 @@ contract Ownable is Context {
     /**
      * @dev Returns the address of the current owner.
      */
-    function owner() public view returns (address) {
+    function owner() public view virtual returns (address) {
         return _owner;
     }
 
@@ -430,11 +417,11 @@ contract Ownable is Context {
      * @dev Throws if called by any account other than the owner.
      */
     modifier onlyOwner() {
-        require(_owner == _msgSender(), "Ownable: caller is not the owner");
+        require(owner() == _msgSender(), "Ownable: caller is not the owner");
         _;
     }
 
-     /**
+    /**
      * @dev Leaves the contract without owner. It will not be possible to call
      * `onlyOwner` functions anymore. Can only be called by the current owner.
      *
@@ -454,26 +441,6 @@ contract Ownable is Context {
         require(newOwner != address(0), "Ownable: new owner is the zero address");
         emit OwnershipTransferred(_owner, newOwner);
         _owner = newOwner;
-    }
-
-    function geUnlockTime() public view returns (uint256) {
-        return _lockTime;
-    }
-
-    //Locks the contract for owner for the amount of time provided
-    function lock(uint256 time) public virtual onlyOwner {
-        _previousOwner = _owner;
-        _owner = address(0);
-        _lockTime = now + time;
-        emit OwnershipTransferred(_owner, address(0));
-    }
-    
-    //Unlocks the contract for owner when _lockTime is exceeds
-    function unlock() public virtual {
-        require(_previousOwner == msg.sender, "You don't have permission to unlock");
-        require(now > _lockTime , "Contract is locked until 7 days");
-        emit OwnershipTransferred(_owner, _previousOwner);
-        _owner = _previousOwner;
     }
 }
 
@@ -709,23 +676,32 @@ contract SafeMoon is Context, IERC20, Ownable {
     uint256 private _rTotal = (MAX - (MAX % _tTotal));
     uint256 private _tFeeTotal;
 
-    string private _name = "SafeMoon";
-    string private _symbol = "SAFEMOON";
+    string private _name = "RED";
+    string private _symbol = "RED";
     uint8 private _decimals = 9;
     
-    uint256 public _taxFee = 5;
-    uint256 private _previousTaxFee = _taxFee;
+    //tax fee is redistributed to all holders
+    uint256 private _redistributionFee = 4;
+    uint256 private _previousRedistributionFee = _redistributionFee;
     
-    uint256 public _liquidityFee = 5;
-    uint256 private _previousLiquidityFee = _liquidityFee;
+    //liquidity fee is periodically sold and added to boost the liquidity to protect from whale dumps
+    
+    uint256 private _feeToBoostLiquidity = 4;
+    uint256 private _feeToDevAndMarketing = 1;
+    uint256 private _feeToCharity = 1;
+    uint256 private _totalFeeForLiquidation = _feeToBoostLiquidity + _feeToDevAndMarketing + _feeToCharity;
+    address payable public _charityWallet;
+    address payable public _devAndMarketingWallet;
+    uint256 private _charityBalance;
+    uint256 private _devAndMarketingBalance;
 
     IUniswapV2Router02 public immutable uniswapV2Router;
     address public immutable uniswapV2Pair;
     
     bool inSwapAndLiquify;
-    bool public swapAndLiquifyEnabled = true;
+    bool private swapAndLiquifyEnabled = true;
     
-    uint256 public _maxTxAmount = 5000000 * 10**6 * 10**9;
+    uint256 private _maxTxAmount = 5000000 * 10**6 * 10**9;
     uint256 private numTokensSellToAddToLiquidity = 500000 * 10**6 * 10**9;
     
     event MinTokensBeforeSwapUpdated(uint256 minTokensBeforeSwap);
@@ -742,20 +718,27 @@ contract SafeMoon is Context, IERC20, Ownable {
         inSwapAndLiquify = false;
     }
     
-    constructor () public {
+    constructor () {
+        
+        //owner starts with tokens and responsible to add to liquidity, launch on dxsale etc
         _rOwned[_msgSender()] = _rTotal;
         
         IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(0x05fF2B0DB69458A0750badebc4f9e13aDd608C7F);
          // Create a uniswap pair for this new token
-        uniswapV2Pair = IUniswapV2Factory(_uniswapV2Router.factory())
+         address _uniswapV2Pair = IUniswapV2Factory(_uniswapV2Router.factory())
             .createPair(address(this), _uniswapV2Router.WETH());
 
         // set the rest of the contract variables
         uniswapV2Router = _uniswapV2Router;
+        uniswapV2Pair = _uniswapV2Pair;
         
         //exclude owner and this contract from fee
         _isExcludedFromFee[owner()] = true;
         _isExcludedFromFee[address(this)] = true;
+        excludeFromReward(_uniswapV2Pair); //the liquidity pool should not receive token distribution
+        
+        _charityWallet = payable(address(this)); //change later if we have a charity
+        _devAndMarketingWallet = payable(address(this)); //change later if we need dev & marketing budget
         
         emit Transfer(address(0), _msgSender(), _tTotal);
     }
@@ -778,7 +761,7 @@ contract SafeMoon is Context, IERC20, Ownable {
 
     function balanceOf(address account) public view override returns (uint256) {
         if (_isExcluded[account]) return _tOwned[account];
-        return tokenFromReflection(_rOwned[account]);
+        return tokenFromReflection(_rOwned[account]); //slowly increases in value over time according to token redistributions
     }
 
     function transfer(address recipient, uint256 amount) public override returns (bool) {
@@ -819,12 +802,17 @@ contract SafeMoon is Context, IERC20, Ownable {
         return _tFeeTotal;
     }
 
+    //looks like this is just a way a user can burn X of their tokens on demand.
     function deliver(uint256 tAmount) public {
         address sender = _msgSender();
         require(!_isExcluded[sender], "Excluded addresses cannot call this function");
+        //calculate r amount from t amount
         (uint256 rAmount,,,,,) = _getValues(tAmount);
+        //burned tokens removed from token owner
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
-        _rTotal = _rTotal.sub(rAmount);
+        //burned tokens removed from _rTotal and added to _tFeeTotal. 
+        //this is same logic that is in _reflectFee, so could be replaced with _reflectFee(rAmount, tAmount);
+        _rTotal = _rTotal.sub(rAmount); 
         _tFeeTotal = _tFeeTotal.add(tAmount);
     }
 
@@ -841,7 +829,7 @@ contract SafeMoon is Context, IERC20, Ownable {
 
     function tokenFromReflection(uint256 rAmount) public view returns(uint256) {
         require(rAmount <= _rTotal, "Amount must be less than total reflections");
-        uint256 currentRate =  _getRate();
+        uint256 currentRate =  _getRate(); //is effectively just _rTotal / _tTotal which is the number of times the initial token supply divides into the maximum value for uint256 
         return rAmount.div(currentRate);
     }
 
@@ -867,18 +855,8 @@ contract SafeMoon is Context, IERC20, Ownable {
             }
         }
     }
-        function _transferBothExcluded(address sender, address recipient, uint256 tAmount) private {
-        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getValues(tAmount);
-        _tOwned[sender] = _tOwned[sender].sub(tAmount);
-        _rOwned[sender] = _rOwned[sender].sub(rAmount);
-        _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
-        _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);        
-        _takeLiquidity(tLiquidity);
-        _reflectFee(rFee, tFee);
-        emit Transfer(sender, recipient, tTransferAmount);
-    }
     
-        function excludeFromFee(address account) public onlyOwner {
+    function excludeFromFee(address account) public onlyOwner {
         _isExcludedFromFee[account] = true;
     }
     
@@ -886,12 +864,12 @@ contract SafeMoon is Context, IERC20, Ownable {
         _isExcludedFromFee[account] = false;
     }
     
-    function setTaxFeePercent(uint256 taxFee) external onlyOwner() {
-        _taxFee = taxFee;
+    function setRedistributionFeePercent(uint256 redistributionFee) external onlyOwner() {
+        _redistributionFee = redistributionFee;
     }
     
-    function setLiquidityFeePercent(uint256 liquidityFee) external onlyOwner() {
-        _liquidityFee = liquidityFee;
+    function setFeeToBoostLiquidityPercent(uint256 feeToBoostLiquidity) external onlyOwner() {
+        _feeToBoostLiquidity = feeToBoostLiquidity;
     }
    
     function setMaxTxPercent(uint256 maxTxPercent) external onlyOwner() {
@@ -899,7 +877,19 @@ contract SafeMoon is Context, IERC20, Ownable {
             10**2
         );
     }
-
+    
+    function setCharityWallet(address payable charityWallet) external onlyOwner() {
+        require(charityWallet != address(0), "_charityWallet cannot be set to Burn Address");
+        
+        _charityWallet = charityWallet;
+    }
+    
+    function setDevAndMarketingWallet(address payable devAndMarketingWallet) external onlyOwner() {
+        require(devAndMarketingWallet != address(0), "_devAndMarketingWallet cannot be set to Burn Address");
+        
+        _devAndMarketingWallet = devAndMarketingWallet;
+    }
+    
     function setSwapAndLiquifyEnabled(bool _enabled) public onlyOwner {
         swapAndLiquifyEnabled = _enabled;
         emit SwapAndLiquifyEnabledUpdated(_enabled);
@@ -908,24 +898,29 @@ contract SafeMoon is Context, IERC20, Ownable {
      //to recieve ETH from uniswapV2Router when swaping
     receive() external payable {}
 
+    //as more tokens redistribute, this reduces the multiplier used to convert between r and t values. as the multiplier is based on _rTotal
+    //so if 1/2 of the tokens are redistributed, currentRate would be  0.5 * _rTotal / _tTotal. i.e. 1/2 the size.
     function _reflectFee(uint256 rFee, uint256 tFee) private {
         _rTotal = _rTotal.sub(rFee);
         _tFeeTotal = _tFeeTotal.add(tFee);
     }
 
+    //calculate the redistribution tax, and liquidity tax, and remaining amount to transfer to recipient
     function _getValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256, uint256, uint256) {
         (uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getTValues(tAmount);
         (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(tAmount, tFee, tLiquidity, _getRate());
         return (rAmount, rTransferAmount, rFee, tTransferAmount, tFee, tLiquidity);
     }
 
+    //calculate the redistribution tax, and liquidity tax, and remaining amount to transfer to recipient
     function _getTValues(uint256 tAmount) private view returns (uint256, uint256, uint256) {
-        uint256 tFee = calculateTaxFee(tAmount);
-        uint256 tLiquidity = calculateLiquidityFee(tAmount);
+        uint256 tFee = calculateRedistributionFee(tAmount);
+        uint256 tLiquidity = calculateTotalFeeForLiquidation(tAmount);
         uint256 tTransferAmount = tAmount.sub(tFee).sub(tLiquidity);
         return (tTransferAmount, tFee, tLiquidity);
     }
-
+    
+    //just multiplies t values by the currentRate (effectively just _rTotal / _tTotal which is the number of times the initial token supply divides into the maximum value for uint256)
     function _getRValues(uint256 tAmount, uint256 tFee, uint256 tLiquidity, uint256 currentRate) private pure returns (uint256, uint256, uint256) {
         uint256 rAmount = tAmount.mul(currentRate);
         uint256 rFee = tFee.mul(currentRate);
@@ -934,56 +929,71 @@ contract SafeMoon is Context, IERC20, Ownable {
         return (rAmount, rTransferAmount, rFee);
     }
 
+    //is effectively just _rTotal / _tTotal which is the number of times the initial token supply divides into the maximum value for uint256
     function _getRate() private view returns(uint256) {
         (uint256 rSupply, uint256 tSupply) = _getCurrentSupply();
-        return rSupply.div(tSupply);
+        return rSupply.div(tSupply);  
     }
-
+    
+    //return current r total and t totals
     function _getCurrentSupply() private view returns(uint256, uint256) {
-        uint256 rSupply = _rTotal;
-        uint256 tSupply = _tTotal;      
+        uint256 rSupply = _rTotal; //an extremely large number. it is the number of times the initial token supply divides into the maximum value for uint256 
+        uint256 tSupply = _tTotal; //the initial token supply
         for (uint256 i = 0; i < _excluded.length; i++) {
+            //account should not own more than total supply. so just return totals
             if (_rOwned[_excluded[i]] > rSupply || _tOwned[_excluded[i]] > tSupply) return (_rTotal, _tTotal);
+            //reduces reflection total
             rSupply = rSupply.sub(_rOwned[_excluded[i]]);
+            //reduces token total
             tSupply = tSupply.sub(_tOwned[_excluded[i]]);
         }
+        //the ratio should not exeed the maximum ratio as contrained by uint256
         if (rSupply < _rTotal.div(_tTotal)) return (_rTotal, _tTotal);
         return (rSupply, tSupply);
     }
     
+    //liquidity fee - will be liquidated and added to liquidity once grows beyond the min liquidation amount
+    //liquidity for liquidation is stored under the contract's own address.
     function _takeLiquidity(uint256 tLiquidity) private {
+        
         uint256 currentRate =  _getRate();
         uint256 rLiquidity = tLiquidity.mul(currentRate);
+        
         _rOwned[address(this)] = _rOwned[address(this)].add(rLiquidity);
+        
         if(_isExcluded[address(this)])
             _tOwned[address(this)] = _tOwned[address(this)].add(tLiquidity);
+            
     }
     
-    function calculateTaxFee(uint256 _amount) private view returns (uint256) {
-        return _amount.mul(_taxFee).div(
-            10**2
-        );
-    }
-
-    function calculateLiquidityFee(uint256 _amount) private view returns (uint256) {
-        return _amount.mul(_liquidityFee).div(
+    //amount that will be redistributed to other holders
+    function calculateRedistributionFee(uint256 _amount) private view returns (uint256) {
+        return _amount.mul(_redistributionFee).div(
             10**2
         );
     }
     
+    //amount that will be sold to be added to liquidity
+    function calculateTotalFeeForLiquidation(uint256 _amount) private view returns (uint256) {
+        return _amount.mul(_totalFeeForLiquidation).div(
+            10**2
+        );
+    }
+    
+    //sets the fees to 0
     function removeAllFee() private {
-        if(_taxFee == 0 && _liquidityFee == 0) return;
+        if(_redistributionFee == 0 && _totalFeeForLiquidation == 0) return;
         
-        _previousTaxFee = _taxFee;
-        _previousLiquidityFee = _liquidityFee;
+        _previousRedistributionFee = _redistributionFee;
         
-        _taxFee = 0;
-        _liquidityFee = 0;
+        _redistributionFee = 0;
+        _totalFeeForLiquidation = 0;
     }
     
+    //turns the fees back on the the rates set in the contract
     function restoreAllFee() private {
-        _taxFee = _previousTaxFee;
-        _liquidityFee = _previousLiquidityFee;
+        _redistributionFee = _previousRedistributionFee;
+        _totalFeeForLiquidation = _feeToBoostLiquidity + _feeToDevAndMarketing + _feeToCharity;
     }
     
     function isExcludedFromFee(address account) public view returns(bool) {
@@ -1046,8 +1056,15 @@ contract SafeMoon is Context, IERC20, Ownable {
 
     function swapAndLiquify(uint256 contractTokenBalance) private lockTheSwap {
         // split the contract balance into halves
-        uint256 half = contractTokenBalance.div(2);
-        uint256 otherHalf = contractTokenBalance.sub(half);
+        
+        uint256 boostLiquidityTokens = contractTokenBalance.mul(_feeToBoostLiquidity).div(_totalFeeForLiquidation);
+        uint256 devAndMarketingTokens = contractTokenBalance.mul(_feeToDevAndMarketing).div(_totalFeeForLiquidation);
+        uint256 charityTokens = contractTokenBalance.sub(boostLiquidityTokens).sub(devAndMarketingTokens);
+        
+        uint256 halfBoostLiquidityTokens = boostLiquidityTokens.div(2);
+        uint256 otherHalfBoostLiquidityTokens = boostLiquidityTokens.sub(halfBoostLiquidityTokens);
+
+        uint256 totalTokensToSell = devAndMarketingTokens + charityTokens + halfBoostLiquidityTokens;
 
         // capture the contract's current ETH balance.
         // this is so that we can capture exactly the amount of ETH that the
@@ -1056,17 +1073,23 @@ contract SafeMoon is Context, IERC20, Ownable {
         uint256 initialBalance = address(this).balance;
 
         // swap tokens for ETH
-        swapTokensForEth(half); // <- this breaks the ETH -> HATE swap when swap+liquify is triggered
+        swapTokensForEth(totalTokensToSell); // <- this breaks the ETH -> HATE swap when swap+liquify is triggered
 
         // how much ETH did we just swap into?
-        uint256 newBalance = address(this).balance.sub(initialBalance);
+        uint256 saleProceeds = address(this).balance.sub(initialBalance);
+
+        uint256 saleProceedsForAddingToLiquidity = saleProceeds.mul(_feeToBoostLiquidity).div(_totalFeeForLiquidation);
+        uint256 saleProceedsForAddingToDevAndMarketing = saleProceeds.mul(_feeToDevAndMarketing).div(_totalFeeForLiquidation);
+        _devAndMarketingBalance = _devAndMarketingBalance.add(saleProceedsForAddingToDevAndMarketing);
+        uint256 saleProceedsForCharity = saleProceeds.sub(saleProceedsForAddingToLiquidity).sub(saleProceedsForAddingToDevAndMarketing);
+        _charityBalance = _charityBalance.add(saleProceedsForCharity);
 
         // add liquidity to uniswap
-        addLiquidity(otherHalf, newBalance);
+        addLiquidity(otherHalfBoostLiquidityTokens, saleProceedsForAddingToLiquidity);
         
-        emit SwapAndLiquify(half, newBalance, otherHalf);
+        emit SwapAndLiquify(halfBoostLiquidityTokens, saleProceedsForAddingToLiquidity, otherHalfBoostLiquidityTokens);
     }
-
+    
     function swapTokensForEth(uint256 tokenAmount) private {
         // generate the uniswap pair path of token -> weth
         address[] memory path = new address[](2);
@@ -1100,6 +1123,32 @@ contract SafeMoon is Context, IERC20, Ownable {
         );
     }
 
+    function retrieveCharityBalance() public {
+        require(_msgSender() == _charityWallet, "Only _charityWallet can retrieve charity balance.");
+        require(_charityBalance >= 0, "Nothing available for withdrawal.");
+        require(_msgSender() != address(this), "Cannot send to self.");
+        require(_msgSender() != address(0), "Cannot send to 0.");
+        
+        //transfer to charity wallet
+        _charityWallet.transfer(_charityBalance);
+        emit Transfer(address(this), _charityWallet, _charityBalance);
+        
+        _charityBalance = 0;
+    }
+    
+    function retrieveDevAndMarketingBalance() public {
+        require(_msgSender() == _charityWallet, "Only _devAndMarketingWallet can retrieve Dev & Marketing balance.");
+        require(_devAndMarketingBalance >= 0, "Nothing available for withdrawal.");
+        require(_msgSender() != address(this), "Cannot send to self.");
+        require(_msgSender() != address(0), "Cannot send to 0.");
+        
+        //transfer to charity wallet
+        _devAndMarketingWallet.transfer(_devAndMarketingBalance);
+        emit Transfer(address(this), _devAndMarketingWallet, _devAndMarketingBalance);
+        
+        _devAndMarketingBalance = 0;
+    }
+
     //this method is responsible for taking all fee, if takeFee is true
     function _tokenTransfer(address sender, address recipient, uint256 amount,bool takeFee) private {
         if(!takeFee)
@@ -1121,6 +1170,11 @@ contract SafeMoon is Context, IERC20, Ownable {
             restoreAllFee();
     }
 
+    //calculate the r amount to transfer, and moves it between sender & recipient wallets.
+    //note that as currentRate reduces over time through token distribution, getValues returns smaller & smaller r amounts.
+    //i.e. the value of r in owners wallets (the real owner's wallets) increases over time, as tokens are redistributed, (in accordance with the redistributions)
+    //i.e. less r is required for each t action as time progresses, so less is removed from the sender's wallet -
+    //because tokens are locked in time at 'currentRate' each time they enter a user's wallet.
     function _transferStandard(address sender, address recipient, uint256 tAmount) private {
         (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getValues(tAmount);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
@@ -1149,5 +1203,17 @@ contract SafeMoon is Context, IERC20, Ownable {
         _reflectFee(rFee, tFee);
         emit Transfer(sender, recipient, tTransferAmount);
     }
+
+    function _transferBothExcluded(address sender, address recipient, uint256 tAmount) private {
+        (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tLiquidity) = _getValues(tAmount);
+        _tOwned[sender] = _tOwned[sender].sub(tAmount);
+        _rOwned[sender] = _rOwned[sender].sub(rAmount);
+        _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
+        _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);        
+        _takeLiquidity(tLiquidity);
+        _reflectFee(rFee, tFee);
+        emit Transfer(sender, recipient, tTransferAmount);
+    }
+    
 
 }

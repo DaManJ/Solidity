@@ -680,7 +680,7 @@ contract SafeMoon is Context, IERC20, Ownable {
     string private _symbol = "RED";
     uint8 private _decimals = 9;
     
-    //tax fee is redistributed to all holders
+    //_redistributionFee redistributed to all holders on each transaction
     uint256 private _redistributionFee = 4;
     uint256 private _previousRedistributionFee = _redistributionFee;
     
@@ -802,7 +802,7 @@ contract SafeMoon is Context, IERC20, Ownable {
         return _tFeeTotal;
     }
 
-    //looks like this is just a way a user can burn X of their tokens on demand.
+    //looks like this is just a way a user can redistribute X of their tokens on demand to everyone.
     function deliver(uint256 tAmount) public {
         address sender = _msgSender();
         require(!_isExcluded[sender], "Excluded addresses cannot call this function");
@@ -829,7 +829,8 @@ contract SafeMoon is Context, IERC20, Ownable {
 
     function tokenFromReflection(uint256 rAmount) public view returns(uint256) {
         require(rAmount <= _rTotal, "Amount must be less than total reflections");
-        uint256 currentRate =  _getRate(); //is effectively just _rTotal / _tTotal which is the number of times the initial token supply divides into the maximum value for uint256 
+        //is effectively just _rTotal / _tTotal which is the number of times the initial token supply divides into the maximum value for uint256 
+        uint256 currentRate =  _getRate(); 
         return rAmount.div(currentRate);
     }
 
@@ -899,7 +900,6 @@ contract SafeMoon is Context, IERC20, Ownable {
     receive() external payable {}
 
     //as more tokens redistribute, this reduces the multiplier used to convert between r and t values. as the multiplier is based on _rTotal
-    //so if 1/2 of the tokens are redistributed, currentRate would be  0.5 * _rTotal / _tTotal. i.e. 1/2 the size.
     function _reflectFee(uint256 rFee, uint256 tFee) private {
         _rTotal = _rTotal.sub(rFee);
         _tFeeTotal = _tFeeTotal.add(tFee);
@@ -920,7 +920,8 @@ contract SafeMoon is Context, IERC20, Ownable {
         return (tTransferAmount, tFee, tLiquidity);
     }
     
-    //just multiplies t values by the currentRate (effectively just _rTotal / _tTotal which is the number of times the initial token supply divides into the maximum value for uint256)
+    //just multiplies t values by the currentRate 
+    //(effectively just _rTotal / _tTotal which is the number of times the initial token supply divides into the maximum value for uint256)
     function _getRValues(uint256 tAmount, uint256 tFee, uint256 tLiquidity, uint256 currentRate) private pure returns (uint256, uint256, uint256) {
         uint256 rAmount = tAmount.mul(currentRate);
         uint256 rFee = tFee.mul(currentRate);
@@ -937,8 +938,10 @@ contract SafeMoon is Context, IERC20, Ownable {
     
     //return current r total and t totals
     function _getCurrentSupply() private view returns(uint256, uint256) {
-        uint256 rSupply = _rTotal; //an extremely large number. it is the number of times the initial token supply divides into the maximum value for uint256 
-        uint256 tSupply = _tTotal; //the initial token supply
+        //starts off at an extremely large number. it is the number of times the initial token supply divides into the maximum value for uint256 
+        uint256 rSupply = _rTotal; 
+        //the initial token supply
+        uint256 tSupply = _tTotal; 
         for (uint256 i = 0; i < _excluded.length; i++) {
             //account should not own more than total supply. so just return totals
             if (_rOwned[_excluded[i]] > rSupply || _tOwned[_excluded[i]] > tSupply) return (_rTotal, _tTotal);

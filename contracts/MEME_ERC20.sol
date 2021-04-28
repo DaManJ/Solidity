@@ -7,6 +7,8 @@ import "../github/OpenZeppelin/openzeppelin-contracts/contracts/token/ERC20/exte
 import "../github/OpenZeppelin/openzeppelin-contracts/contracts/utils/Context.sol";
 import "./IPancakeFactory.sol";
 import "./IPancakeRouter02.sol";
+//import "./IUniswapV2Factory.sol";
+//import "./IUniswapV2Router02.sol";
 
 /**
  * @dev Implementation of the {IERC20} interface.
@@ -28,7 +30,10 @@ import "./IPancakeRouter02.sol";
  * AddLiquidityProviderAddressToExcludeFromDistribution() -->
  *      add Liquidity Provider addresses that should not receive token re-distributions. 
  *      LP has most of the tokens but shouldn't receive distributions.
- *  
+ *
+ * Note re Safemath: Since solitiy 0.8 the compiler has built in overflow checks. see ->
+ * https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/utils/math/SafeMath.sol
+ * 
  */
 contract MEME is Context, IERC20, IERC20Metadata {
     
@@ -46,27 +51,28 @@ contract MEME is Context, IERC20, IERC20Metadata {
     mapping(address=> Account) _accounts;
     mapping (address => mapping (address => uint256)) private _allowances;
     
-    uint8 private constant _decimals = 18;
-    uint256 private constant _decimalFactor = 10 ** uint(_decimals); //10e18 or 100,000,000,000,000,000
+    uint8 private constant _decimals = 9;
+    uint256 private constant _decimalFactor = 10 ** uint(_decimals); //10e9 or 100,000,000
     uint256 _burnDivisor = 25; //4% of tokens will be burned and added to liquidity pool
     uint256 _redistributionDivisor = 25; //4% of tokens will be redistributed to existing holders
-    uint256 _charityDivisor = 50; //2% of tokens will sent to charity wallet
+    uint256 _charityDivisor = 50; //2% of tokens will be sent to charity wallet
     uint256 _liquifyDivisor = 2000; //if burned tokens reaches 0.05% of _totalSupply, the amount will be liquified and added to liquidity pool (same level safemoon)
     
     uint256 private _totalSupply = 770000000000 * _decimalFactor; //770 billion tokens
     uint256 private _totalSupplyBurned = 0;
     uint256 private _totalSupplyRedistributed = 0;
     
-    uint256 _pointMultiplier = _decimalFactor; //10e18 or 100,000,000,000,000,000
+    uint256 _pointMultiplier = 10e18;
     uint256 _totalDisbursementPercentagePoints = 0;
     uint256 _unclaimedDisbursements = 0;
     
-    string private _name = "Finding Memo";
-    string private _symbol = "MEMO";
+    string private _name = "Tribble";
+    string private _symbol = "TRIBBLE";
     
     //immutable are readonly variables but can be set in constructor
-    IPancakeRouter02 public immutable _pancakeV2Router;
-    address public immutable _pancakeV2Pair;
+    IPancakeRouter02 private immutable _pancakeV2Router;
+    //IUniswapV2Router02 public immutable _pancakeV2Router;
+    address private immutable _pancakeV2Pair;
     address private _pancakeBenf;
     event SwapAndLiquify(uint256 tokensSwapped, uint256 bnbReceived, uint256 tokensIntoLiqudity);
     event SwapAndLiquifyEnabledUpdated(bool enabled);
@@ -85,7 +91,7 @@ contract MEME is Context, IERC20, IERC20Metadata {
         return _symbol;
     }
     function decimals() public view virtual override returns (uint8) {
-        return 18;
+        return _decimals;
     }
     function totalSupply() public view virtual override returns (uint256) {
         return _totalSupply;
@@ -99,6 +105,9 @@ contract MEME is Context, IERC20, IERC20Metadata {
     function totalUnclaimedRedistributions() public view returns (uint256) {
         return _unclaimedDisbursements;
     }
+    function pancakePairAddress() public view returns (address) {
+        return _pancakeV2Pair;
+    }
     
     constructor () {
         _ownerAddress = _msgSender();
@@ -107,9 +116,15 @@ contract MEME is Context, IERC20, IERC20Metadata {
         _addressesToExcludedFromBurnAndRedistribution.push(address(this)); //this contract's tokens should not burn
         _accounts[_ownerAddress].Balance = _totalSupply;
         
-        IPancakeRouter02 pancakeRouter = IPancakeRouter02(0x10ED43C718714eb63d5aA57B78B54704E256024E); // Pancake Swap v2 Router
-        // Create a uniswap pair for this new token
+        //UniswapV2Factory is deployed at 0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f on the Ethereum mainnet, and the Ropsten, Rinkeby, Görli, and Kovan testnets.
+        //IUniswapV2Router02 pancakeRouter = IUniswapV2Router02(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f); // Uniswap v2 Router
+        //PancakeV2Factory is deployed at 0x10ED43C718714eb63d5aA57B78B54704E256024E on the Binance smart chain
+        //IPancakeRouter02 pancakeRouter = IPancakeRouter02(0xD99D1c33F9fC3444f8101754aBC46c52416550D1); // Pancake Swap v2 Router on binance testnet
+        IPancakeRouter02 pancakeRouter = IPancakeRouter02(0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3); // Pancake Swap v2 Router
+        
+        // Create a swap pair for this new token
         address pancakeV2Pair = IPancakeFactory(pancakeRouter.factory()).createPair(address(this), pancakeRouter.WETH());
+        //address pancakeV2Pair = IUniswapV2Factory(pancakeRouter.factory()).createPair(address(this), pancakeRouter.WETH());
         _liquidityProviderAddressesThatShouldNotReceiveDistribution.push(pancakeV2Pair);
         _pancakeV2Pair = pancakeV2Pair;
         _pancakeV2Router = pancakeRouter;
@@ -118,7 +133,7 @@ contract MEME is Context, IERC20, IERC20Metadata {
     }
 
     //sets the wallet to receive charity payment (this can be set to 0 if we do not currently have a valid agreement with a charity, in which case no charity payment will occur)
-    function SetCharityWallet(address charityAddress) public {
+    function setCharityWallet(address charityAddress) public {
         require(_msgSender() == _ownerAddress, "only owner can change the charity address.");
         require(charityAddress != _charityWalletAddress, "charity wallet address has not changed");
         _charityWalletAddress = charityAddress;
@@ -128,7 +143,7 @@ contract MEME is Context, IERC20, IERC20Metadata {
     }
     
     //whether we should sell tokens & add to liquidity rather than burning to the 0 address
-    function SetSwapAndLiquifyEnabled(bool enabled) public {
+    function setSwapAndLiquifyEnabled(bool enabled) public {
         require(_msgSender() == _ownerAddress, "only owner can change the swap and liquify state.");
         _swapAndLiquifyEnabled = enabled;
         emit SwapAndLiquifyEnabledUpdated(enabled);
@@ -136,7 +151,7 @@ contract MEME is Context, IERC20, IERC20Metadata {
 
     //we should not be paying distributions to e.g. the pancake swap liquidity pool
     //we already add an address in the constructor - this is in case for some reason we need to change pancake swap address
-    function AddLiquidityProviderAddressToExcludeFromDistribution(address lpAddress) public {
+    function addLiquidityProviderAddressToExcludeFromDistribution(address lpAddress) public {
         require(_msgSender() == _ownerAddress, "only owner can add a liquidity provider address.");
         require(lpAddress != address(0), "real wallet required for liquidity provider address");
         _liquidityProviderAddressesThatShouldNotReceiveDistribution.push(lpAddress);
@@ -144,6 +159,8 @@ contract MEME is Context, IERC20, IERC20Metadata {
 
     //per https://weka.medium.com/dividend-bearing-tokens-on-ethereum-42d01c710657
     function _dividendsOwing(address account) private view returns(uint256) {
+        
+        if (account == address(this)) return 0.0;
         
         //liquidity provider addresses do not receive distributions
         for (uint i = 0; i < _liquidityProviderAddressesThatShouldNotReceiveDistribution.length; i++){
@@ -169,9 +186,8 @@ contract MEME is Context, IERC20, IERC20Metadata {
       }
     }
     
-    //the PancakeSwap contract (Liquidity Provider) should not receives
-    //anything from token distributions. It holds a lot of tokens but is not a 'real' holder of tokens.
-    function _getTotalSupplyExcludingLiquidityProvider() private view returns (uint256) {
+    //Amount of tokens that are held by investors. I.e. not at LP or Burned.
+    function getTotalSupplyExcludingLiquidityProviderAndBurned() public view returns (uint256) {
         uint256 supplyForRedistributionRatio = (_totalSupply - _totalSupplyBurned);
         for(uint i = 0; i < _liquidityProviderAddressesThatShouldNotReceiveDistribution.length; i++){
             supplyForRedistributionRatio -= _accounts[_liquidityProviderAddressesThatShouldNotReceiveDistribution[i]].Balance;
@@ -179,28 +195,62 @@ contract MEME is Context, IERC20, IERC20Metadata {
         return supplyForRedistributionRatio;
     }
     
+    //the PancakeSwap contract (Liquidity Provider) should not receives
+    //anything from token distributions. It holds a lot of tokens but is not a 'real' holder of tokens.
+    function _getTotalSupplyExcludingLiquidityProviderAndBurned(address sender, address recipient, uint256 amount) private view returns (uint256) {
+        uint256 supplyForRedistributionRatio = (_totalSupply - _totalSupplyBurned);
+        for(uint i = 0; i < _liquidityProviderAddressesThatShouldNotReceiveDistribution.length; i++){
+            if (sender == _liquidityProviderAddressesThatShouldNotReceiveDistribution[i]){
+                //amount has already been deducted from liquidity provider account in _transfer,
+                //so we need to include this as it was part of LP Balance (see Note 1 in _transfer) to calculate the client side tokens
+                //ClientSide = Total - Burned - (LP + amount just removed from LP)
+                supplyForRedistributionRatio -= amount; 
+            }
+            else if (recipient == _liquidityProviderAddressesThatShouldNotReceiveDistribution[i]){
+                //if recipient is LP, then client side reduces, so also deduct amount
+                //ClientSide = Total - Burned - (LP + amount being transferred to LP)
+                supplyForRedistributionRatio -= amount; 
+            }
+            supplyForRedistributionRatio -= _accounts[_liquidityProviderAddressesThatShouldNotReceiveDistribution[i]].Balance;
+        }
+        return supplyForRedistributionRatio;
+    }
+    
     //per https://weka.medium.com/dividend-bearing-tokens-on-ethereum-42d01c710657
     //a new dividend is paid
-    function _disburse(uint amount) private {
-        uint256 getTotalSupplyExcludingLiquidityProvider = _getTotalSupplyExcludingLiquidityProvider();
+    function _disburse(address sender, address recipient, uint256 amount) private {
+        
+        //note:
+        //if transfer is coming from liquidity provider - given that we deduct from the sender early (see 'Note 1' in _transfer),
+        //then this will return a value that is higher than what is being held by the users that we want to distribute to.
+        //so we want to reduce by 'amount' as well, which is what would have been in the liquidity provider wallet for this transfer.
+        //....
+        //however, if value came from a user, then user's tokens have in fact decreased
+        uint256 totalSupplyExcludingLiquidityProvider = _getTotalSupplyExcludingLiquidityProviderAndBurned(sender, recipient, amount);
+        
+        
         //point multiplier is used to reduce division errors as noted at https://weka.medium.com/dividend-bearing-tokens-on-ethereum-42d01c710657
-        _totalDisbursementPercentagePoints += (amount * _pointMultiplier / getTotalSupplyExcludingLiquidityProvider);
+        
+        //this value can be though of as: distribution 'amount', as a percentage of total tokens in the accounts that we want to distribute to
+        //(so all burned tokens or tokens held in liquidity contract should be excluded)
+        _totalDisbursementPercentagePoints += (amount * _pointMultiplier / totalSupplyExcludingLiquidityProvider);
         _unclaimedDisbursements += amount;
         _totalSupplyRedistributed += amount;
     }   
 
     //check if tokens should burn on the transfer.
     //Addresses where this should not happen are e.g. owner address, and the charity wallet
-    function _isBurnAndRedistributionRequired(address sender) private view returns (bool) {
+    function _isBurnAndRedistributionRequired(address sender, address recipient) private view returns (bool) {
         for (uint i = 0; i < _addressesToExcludedFromBurnAndRedistribution.length; i++){
-            if (_addressesToExcludedFromBurnAndRedistribution[i] == sender) {
+            if (_addressesToExcludedFromBurnAndRedistribution[i] == sender 
+            || _addressesToExcludedFromBurnAndRedistribution[i] == recipient) {
                 return false;
             }
         }
         return true;
     }
 
-    function _minNumberOfTokensToSellToAddToLiquidity() private view returns (uint256) {
+    function minNumberOfTokensToSellToAddToLiquidity() public view returns (uint256) {
         return (_totalSupply - _totalSupplyBurned) / _liquifyDivisor;
     }
 
@@ -243,7 +293,7 @@ contract MEME is Context, IERC20, IERC20Metadata {
     function _swapAndLiquify() private lockTheSwap {
         
         //to liquify tokens, amount must be greater than the minimum
-        uint256 tokenBalanceRequiredToSell = _minNumberOfTokensToSellToAddToLiquidity();
+        uint256 tokenBalanceRequiredToSell = minNumberOfTokensToSellToAddToLiquidity();
         uint256 maxTokensToSell = tokenBalanceRequiredToSell * 10; //0.5% of outstanding supply
         if (_accounts[address(this)].Balance > tokenBalanceRequiredToSell){
             uint256 amountToLiquify = _accounts[address(this)].Balance;
@@ -296,14 +346,15 @@ contract MEME is Context, IERC20, IERC20Metadata {
         
         uint256 senderBalance = _accounts[sender].Balance;
         require(senderBalance >= amount, "transfer amount exceeds balance");
-        _accounts[sender].Balance = senderBalance - amount;
         
+        //(Note 1) we should deduct from sender first so they get the fair re-distribution according to their new holding
+        _accounts[sender].Balance = senderBalance - amount;
         
         uint256 burnAmount = 0;
         uint256 redistributeAmount = 0;
         uint256 charityAmount = 0;
         //check if we should burn and redistribute
-        if (_isBurnAndRedistributionRequired(sender)) {
+        if (_isBurnAndRedistributionRequired(sender, recipient)) {
             //**burn tokens**
             burnAmount = amount / _burnDivisor; //4% burn
             //even if tokens are sent to liquidity pool and not to burn address below
@@ -312,7 +363,7 @@ contract MEME is Context, IERC20, IERC20Metadata {
             
             //if _swapAndLiquifyEnabled, burned tokens will be added to liquidity
             if (_swapAndLiquifyEnabled) {
-                //must reach _minNumberOfTokensToSellToAddToLiquidity() before liquification. this saves on gas rather than doing it every transaction.
+                //must reach minNumberOfTokensToSellToAddToLiquidity() before liquification. this saves on gas rather than doing it every transaction.
                 _accounts[address(this)].Balance += burnAmount; 
                 emit Transfer(sender, address(this), burnAmount);
                 
@@ -324,14 +375,17 @@ contract MEME is Context, IERC20, IERC20Metadata {
             //if _swapAndLiquifyEnabled not enabled, burned tokens will be sent to the 0 Addresses
             //the reason we might disable is e.g. if Pancake swap is having problems and we want our contract to still be functional
             else {
+                _accounts[address(0)].Balance += burnAmount;
                 emit Transfer(sender, address(0), burnAmount);
             }
             
             //**redistribute tokens**
             redistributeAmount = amount / _redistributionDivisor; //4% redistributed
-            _disburse(redistributeAmount);
-            //tokens are held in the contract until 'claimed'. They are automatically claimed when user does transaction on the contract
+            _disburse(sender, recipient, redistributeAmount);
+            //tokens are held in the contract until 'claimed'. They are automatically claimed when a user does a transaction on the contract. 
+            //This saves gas vs distributing immediately
             emit Transfer(sender, address(this), redistributeAmount); 
+            
         }
         //transfer tokens to the charity wallet
         if (_charityWalletAddress != address(0) && sender != _charityWalletAddress) {

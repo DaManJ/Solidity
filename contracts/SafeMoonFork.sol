@@ -676,8 +676,8 @@ contract SafeMoon is Context, IERC20, Ownable {
     uint256 private _rTotal = (MAX - (MAX % _tTotal));
     uint256 private _tFeeTotal;
 
-    string private _name = "RED";
-    string private _symbol = "RED";
+    string private _name = "Strong Coffee";
+    string private _symbol = "COFFEE";
     uint8 private _decimals = 9;
     
     //_redistributionFee redistributed to all holders on each transaction
@@ -723,7 +723,7 @@ contract SafeMoon is Context, IERC20, Ownable {
         //owner starts with tokens and responsible to add to liquidity, launch on dxsale etc
         _rOwned[_msgSender()] = _rTotal;
         
-        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(0x05fF2B0DB69458A0750badebc4f9e13aDd608C7F);
+        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3);
          // Create a uniswap pair for this new token
          address _uniswapV2Pair = IUniswapV2Factory(_uniswapV2Router.factory())
             .createPair(address(this), _uniswapV2Router.WETH());
@@ -772,6 +772,11 @@ contract SafeMoon is Context, IERC20, Ownable {
     //ETH available to Dev & Marketing Balance wallet to withdraw
     function availableDevAndMarketingBalance() public view returns (uint256) {
         return _devAndMarketingBalance;
+    }
+    
+    //ETH available in contract. There needs to be some here for trading on pancake.
+    function contractBalance() public view returns (uint256) {
+        return address(this).balance;
     }
     
     //ETH available to Dev & Marketing Balance wallet to withdraw
@@ -1096,8 +1101,8 @@ contract SafeMoon is Context, IERC20, Ownable {
         // how much ETH did we just swap into?
         uint256 saleProceeds = address(this).balance.sub(initialBalance);
 
-        uint256 saleProceedsForAddingToLiquidity = saleProceeds.mul(_feeToBoostLiquidity).div(_totalFeeForLiquidation);
-        uint256 saleProceedsForAddingToDevAndMarketing = saleProceeds.mul(_feeToDevAndMarketing).div(_totalFeeForLiquidation);
+        uint256 saleProceedsForAddingToLiquidity = saleProceeds.mul(halfBoostLiquidityTokens).div(totalTokensToSell);
+        uint256 saleProceedsForAddingToDevAndMarketing = saleProceeds.mul(devAndMarketingTokens).div(totalTokensToSell);
         _devAndMarketingBalance = _devAndMarketingBalance.add(saleProceedsForAddingToDevAndMarketing);
         uint256 saleProceedsForCharity = saleProceeds.sub(saleProceedsForAddingToLiquidity).sub(saleProceedsForAddingToDevAndMarketing);
         _charityBalance = _charityBalance.add(saleProceedsForCharity);
@@ -1146,6 +1151,9 @@ contract SafeMoon is Context, IERC20, Ownable {
         require(_charityBalance >= 0, "Nothing available for withdrawal.");
         require(_msgSender() != address(this), "Cannot send to self.");
         require(_msgSender() != address(0), "Cannot send to 0.");
+        //we need to keep enough balance for gas fees
+        uint256 minBalance = _devAndMarketingBalance.add(200000000000000000); //adding 0.2 ETH
+        require(address(this).balance > minBalance, "Not enough balance for transfer.");
         
         //transfer to charity wallet
         _charityWallet.transfer(_charityBalance);
@@ -1159,6 +1167,9 @@ contract SafeMoon is Context, IERC20, Ownable {
         require(_devAndMarketingBalance >= 0, "Nothing available for withdrawal.");
         require(_msgSender() != address(this), "Cannot send to self.");
         require(_msgSender() != address(0), "Cannot send to 0.");
+        //we need to keep enough balance for gas fees
+        uint256 minBalance = _devAndMarketingBalance.add(200000000000000000); //adding 0.2 ETH
+        require(address(this).balance > minBalance, "Not enough balance for transfer.");
         
         //transfer to charity wallet
         _devAndMarketingWallet.transfer(_devAndMarketingBalance);

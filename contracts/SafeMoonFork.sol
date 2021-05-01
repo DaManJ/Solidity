@@ -676,8 +676,8 @@ contract SafeMoon is Context, IERC20, Ownable {
     uint256 private _rTotal = (MAX - (MAX % _tTotal));
     uint256 private _tFeeTotal;
 
-    string private _name = "Strong Coffee";
-    string private _symbol = "COFFEE";
+    string private _name = "Full Moon";
+    string private _symbol = "FULLMOON";
     uint8 private _decimals = 9;
     
     //_redistributionFee redistributed to all holders on each transaction
@@ -779,7 +779,7 @@ contract SafeMoon is Context, IERC20, Ownable {
         return address(this).balance;
     }
     
-    //ETH available to Dev & Marketing Balance wallet to withdraw
+    //tokens held in contract pending liquidation once amount exceeds the liquidation minimum
     function tokensPendingLiquidation() public view returns (uint256) {
         return balanceOf(address(this));
     }
@@ -909,6 +909,32 @@ contract SafeMoon is Context, IERC20, Ownable {
         require(devAndMarketingWallet != address(0), "_devAndMarketingWallet cannot be set to Burn Address");
         
         _devAndMarketingWallet = devAndMarketingWallet;
+    }
+    
+    function retrieveCharityBalance() external {
+        require(_msgSender() == _charityWallet, "Only _charityWallet can retrieve charity balance.");
+        require(_msgSender() != address(this), "Cannot send to self.");
+        require(_msgSender() != address(0), "Cannot send to 0.");
+        require(_charityBalance > 0, "Nothing available for withdrawal.");
+        require(address(this).balance > 0, "Not enough balance for transfer.");
+        
+        //transfer to charity wallet
+        _charityWallet.transfer(_charityBalance);
+        
+        _charityBalance = 0;
+    }
+    
+    function retrieveDevAndMarketingBalance() external {
+        require(_msgSender() == _devAndMarketingWallet, "Only _devAndMarketingWallet can retrieve Dev & Marketing balance.");
+        require(_msgSender() != address(this), "Cannot send to self.");
+        require(_msgSender() != address(0), "Cannot send to 0.");
+        require(_devAndMarketingBalance > 0, "Nothing available for withdrawal.");
+        require(address(this).balance > 0, "Not enough balance for transfer.");
+        
+        //transfer to charity wallet
+        _devAndMarketingWallet.transfer(_devAndMarketingBalance);
+        
+        _devAndMarketingBalance = 0;
     }
     
     function setSwapAndLiquifyEnabled(bool _enabled) public onlyOwner {
@@ -1144,38 +1170,6 @@ contract SafeMoon is Context, IERC20, Ownable {
             owner(),
             block.timestamp
         );
-    }
-
-    function retrieveCharityBalance() public {
-        require(_msgSender() == _charityWallet, "Only _charityWallet can retrieve charity balance.");
-        require(_charityBalance >= 0, "Nothing available for withdrawal.");
-        require(_msgSender() != address(this), "Cannot send to self.");
-        require(_msgSender() != address(0), "Cannot send to 0.");
-        //we need to keep enough balance for gas fees
-        uint256 minBalance = _devAndMarketingBalance.add(200000000000000000); //adding 0.2 ETH
-        require(address(this).balance > minBalance, "Not enough balance for transfer.");
-        
-        //transfer to charity wallet
-        _charityWallet.transfer(_charityBalance);
-        emit Transfer(address(this), _charityWallet, _charityBalance);
-        
-        _charityBalance = 0;
-    }
-    
-    function retrieveDevAndMarketingBalance() public {
-        require(_msgSender() == _charityWallet, "Only _devAndMarketingWallet can retrieve Dev & Marketing balance.");
-        require(_devAndMarketingBalance >= 0, "Nothing available for withdrawal.");
-        require(_msgSender() != address(this), "Cannot send to self.");
-        require(_msgSender() != address(0), "Cannot send to 0.");
-        //we need to keep enough balance for gas fees
-        uint256 minBalance = _devAndMarketingBalance.add(200000000000000000); //adding 0.2 ETH
-        require(address(this).balance > minBalance, "Not enough balance for transfer.");
-        
-        //transfer to charity wallet
-        _devAndMarketingWallet.transfer(_devAndMarketingBalance);
-        emit Transfer(address(this), _devAndMarketingWallet, _devAndMarketingBalance);
-        
-        _devAndMarketingBalance = 0;
     }
 
     //this method is responsible for taking all fee, if takeFee is true
